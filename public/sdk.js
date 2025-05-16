@@ -31,7 +31,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
       orders.forEach(order => {
         const clone = template.cloneNode(true);
-        clone.setAttribute('data-astroweave-order', order.id); // critical for reviews
+        clone.setAttribute('data-astroweave-order', order.id); // Unique per order
 
         clone.querySelector('[data-astroweave-order-id]').textContent = order.id;
         clone.querySelector('[data-astroweave-order-date]').textContent = new Date(order.created_at).toLocaleDateString();
@@ -42,7 +42,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
       wrapper.closest('.page-wrapper')?.classList.remove('orders-loading');
 
-      // --- Reviews Wiring (MVP: 1 review per order) ---
+      // --- Reviews Wiring ---
       wireUpReviewForms();
     } catch (err) {
       console.error('AstroWeave Orders Error:', err);
@@ -55,20 +55,17 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     // Auth: get user
     const { data: { user } } = await supabase.auth.getUser();
 
-    // For each duplicated order-card
     document.querySelectorAll('.order-card[data-astroweave-order]').forEach(card => {
       const orderId = card.getAttribute('data-astroweave-order');
       const reviewForm = card.querySelector('form');
       const textarea = reviewForm?.querySelector('textarea');
       const submitBtn = reviewForm?.querySelector('input[type="submit"],button[type="submit"]');
-      const successMsg = card.querySelector('.Success\\ Message') || card.querySelector('.success-message');
-      const errorMsg = card.querySelector('.Error\\ Message') || card.querySelector('.error-message');
+      const successMsg = card.querySelector('.success-message') || card.querySelector('.Success\\ Message');
+      const errorMsg = card.querySelector('.error-message') || card.querySelector('.Error\\ Message');
 
-      // Clean up old messages
       if (successMsg) successMsg.style.display = 'none';
       if (errorMsg) errorMsg.style.display = 'none';
 
-      // If not logged in, disable form
       if (!user) {
         if (reviewForm) {
           reviewForm.innerHTML = `<div>Please log in to leave a review.</div>`;
@@ -76,7 +73,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         return;
       }
 
-      // Wire up submit handler
       reviewForm?.addEventListener('submit', async (e) => {
         e.preventDefault();
         if (!textarea.value.trim()) return;
@@ -105,11 +101,3 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         } else {
           alert('Thanks for your review!');
         }
-        reviewForm.reset();
-
-        // (Optional) Disable form or hide after submit:
-        // reviewForm.style.display = 'none';
-      });
-    });
-  }
-})();
