@@ -50,7 +50,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     }
   });
 
-  // --- Review Module: MVP ---
+  // --- Review Module: MVP (Webflow form compatible) ---
   async function wireUpReviewForms() {
     // Auth: get user
     const { data: { user } } = await supabase.auth.getUser();
@@ -59,22 +59,25 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       const orderId = card.getAttribute('data-astroweave-order');
       const reviewForm = card.querySelector('form');
       const textarea = reviewForm?.querySelector('textarea');
-      const submitBtn = reviewForm?.querySelector('input[type="submit"],button[type="submit"]');
-      const successMsg = card.querySelector('.success-message') || card.querySelector('.Success\\ Message');
-      const errorMsg = card.querySelector('.error-message') || card.querySelector('.Error\\ Message');
 
+      // Webflow's built-in success/error messages:
+      const successMsg = card.querySelector('.w-form-done');
+      const errorMsg = card.querySelector('.w-form-fail');
+
+      // Hide default messages initially
       if (successMsg) successMsg.style.display = 'none';
       if (errorMsg) errorMsg.style.display = 'none';
 
-      if (!user) {
-        if (reviewForm) {
-          reviewForm.innerHTML = `<div>Please log in to leave a review.</div>`;
-        }
+      // If not logged in, replace form with message
+      if (!user && reviewForm) {
+        reviewForm.innerHTML = `<div>Please log in to leave a review.</div>`;
         return;
       }
 
       reviewForm?.addEventListener('submit', async (e) => {
         e.preventDefault();
+        e.stopPropagation(); // CRUCIAL: Block Webflow AJAX hijack
+
         if (!textarea.value.trim()) return;
 
         // Insert review into Supabase
@@ -82,13 +85,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
           user_id: user.id,
           order_id: orderId,
           text: textarea.value.trim(),
-          // Add "rating" if you want stars
         });
 
         if (error) {
           if (errorMsg) {
-            errorMsg.textContent = 'Failed to submit review. Please try again.';
             errorMsg.style.display = '';
+            successMsg.style.display = 'none';
           } else {
             alert('Failed to submit review.');
           }
@@ -96,8 +98,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         }
 
         if (successMsg) {
-          successMsg.textContent = 'Thanks for your review!';
           successMsg.style.display = '';
+          errorMsg.style.display = 'none';
         } else {
           alert('Thanks for your review!');
         }
+        reviewForm.reset();
+      });
+    });
+  }
+})();
