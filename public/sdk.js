@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   console.log('Found order cards for review wiring:', orderCards.length);
 
   orderCards.forEach(card => {
-    // Find an existing form with a textarea, else inject a fallback
+    // Find existing form or inject fallback
     let reviewForm = card.querySelector('form');
     const hasTextarea = reviewForm?.querySelector('textarea');
     if (!reviewForm || !hasTextarea) {
@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       card.appendChild(reviewForm);
     }
 
-    // If user not logged in, hide form and show notice
+    // Hide form if not logged in, show login prompt
     if (!clerkUser) {
       reviewForm.style.display = 'none';
       const loginNotice = document.createElement('div');
@@ -95,8 +95,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     console.log('Attaching submit listener for user:', clerkUser.id);
-    reviewForm.addEventListener('submit', async e => {
+
+    // Common submit handler
+    const handleSubmit = async (e) => {
       e.preventDefault();
+      e.stopPropagation();
       console.log('Review form submitted for card:', card.getAttribute('data-astroweave-order'));
 
       const textarea = reviewForm.querySelector('textarea');
@@ -122,7 +125,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         alert('Thanks for your review!');
         reviewForm.reset();
       }
-    });
+    };
+
+    // Attach both form submit and button click to bypass Webflow interference
+    reviewForm.addEventListener('submit', handleSubmit, true);
+    const submitBtn = reviewForm.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.addEventListener('click', handleSubmit, true);
+    }
   });
 });
+
 
