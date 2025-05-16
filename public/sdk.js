@@ -17,70 +17,63 @@ async function getSupabaseClient() {
   const token = await session.getToken({ template: 'supabase' });
   console.log('Clerk Supabase JWT:', token);
 
-  // This is what actually sets the JWT for all requests in v2!
+  // Set Clerk JWT for all requests (v2!)
   supabase.auth.setAuth(token);
 
   return supabase;
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Your order/review UI logic stays the same as before
-
-  // ...Render orders code...
-
-  // Wire review form submit (replace this with your new submit logic, as before)
+  // Wait for Clerk session/user
   const clerkUser = window.Clerk?.session?.user;
+
+  // For every order card, inject a fresh review UI
   const orderCards = document.querySelectorAll('.order-card[data-astroweave-order]');
   orderCards.forEach(card => {
-    let reviewForm = card.querySelector('form');
-    const hasTextarea = reviewForm?.querySelector('textarea');
-    if (!reviewForm || !hasTextarea) {
-      reviewForm = document.createElement('form');
-      reviewForm.innerHTML = `
-        <textarea placeholder="Write your review" required></textarea>
-        <button type="submit">Submit Review</button>
+    // Remove all existing forms under this card (avoid Webflow interference)
+    card.querySelectorAll('form').forEach(f => f.remove());
+
+    // Add our review UI
+    let reviewDiv = card.querySelector('.astroweave-review');
+    if (!reviewDiv) {
+      reviewDiv = document.createElement('div');
+      reviewDiv.className = 'astroweave-review';
+      reviewDiv.innerHTML = `
+        <textarea class="astroweave-review-text" placeholder="Write your review..." style="width: 100%; margin-bottom: 8px;"></textarea>
+        <button class="astroweave-review-submit" style="padding: 6px 18px; cursor: pointer;">Submit Review</button>
       `;
-      card.appendChild(reviewForm);
+      card.appendChild(reviewDiv);
     }
 
+    // Hide if not logged in
     if (!clerkUser) {
-      reviewForm.style.display = 'none';
+      reviewDiv.style.display = 'none';
       const loginNotice = document.createElement('div');
       loginNotice.textContent = 'Please log in to leave a review.';
       card.appendChild(loginNotice);
       return;
     }
 
-    const handleSubmit = async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const textarea = reviewForm.querySelector('textarea');
-      if (!textarea || !textarea.value.trim()) return;
-
+    // Wire up review submit
+    reviewDiv.querySelector('.astroweave-review-submit').onclick = async () => {
+      const textarea = reviewDiv.querySelector('.astroweave-review-text');
+      if (!textarea.value.trim()) return alert('Enter a review first!');
       const client = await getSupabaseClient();
-      console.log('Submitting review for order:', card.getAttribute('data-astroweave-order'));
 
-      const { error: insertError } = await client.from('reviews').insert({
+      const { error } = await client.from('reviews').insert({
         user_id: clerkUser.id,
-        order_id: card.getAttribute('data-astroweave-order'),
+        order_id: card.getAttribute('data-astroweave-order') || 'ORD-001',
         text: textarea.value.trim(),
       });
 
-      if (insertError) {
-        console.error('Supabase insert error:', insertError.message);
-        alert('Failed to submit review: ' + insertError.message);
+      if (error) {
+        console.error('Supabase insert error:', error.message);
+        alert('Failed to submit review: ' + error.message);
       } else {
-        console.log('Review submitted successfully');
         alert('Thanks for your review!');
-        reviewForm.reset();
+        textarea.value = '';
       }
     };
-
-    reviewForm.addEventListener('submit', handleSubmit, true);
-    const submitBtn = reviewForm.querySelector('button[type=\"submit\"]');
-    if (submitBtn) {
-      submitBtn.addEventListener('click', handleSubmit, true);
-    }
   });
 });
 
