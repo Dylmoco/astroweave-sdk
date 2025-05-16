@@ -5,121 +5,92 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const SUPABASE_URL = 'https://lpuqrzvokroazwlricgn.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxwdXFyenZva3JvYXp3bHJpY2duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcyNDE0NzYsImV4cCI6MjA2MjgxNzQ3Nn0.hv_idyZGUD0JlFBwl_zWLpCFnI1Uoit-IahjXa6wM84';
 
-async function getClerkSupabaseClient() {
-  if (!window.Clerk) return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  await window.Clerk.load();
-  const session = window.Clerk.session;
-  let headers = {};
-  if (session) {
-    const token = await session.getToken({ template: "supabase" });
-    if (token) {
-      headers = { Authorization: `Bearer ${token}` };
-    }
+let supabaseClient = null;
+
+async function getSupabaseClient() {
+  if (supabaseClient) return supabaseClient;
+
+  if (!window.Clerk) {
+    supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    return supabaseClient;
   }
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers } });
-}
 
-// --- Orders + Reviews Module ---
-(function () {
-  const ATTR = 'data-astroweave-orders';
+  await window.Clerk.load();
 
-  document.addEventListener('DOMContentLoaded', async () => {
-    const wrapper = document.querySelector(`[${ATTR}]`);
-    if (!wrapper) return;
+  const session = window.Clerk.session;
+  if (!session) {
+    supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    return supabaseClient;
+  }
 
-    const endpoint = wrapper.getAttribute(ATTR);
-    if (!endpoint) return console.error('AstroWeave: No orders endpoint found.');
+  const token = await session.getToken({ template: "supabase" });
+  console.log('Clerk Supabase JWT:', token);
 
-    wrapper.closest('.page-wrapper')?.classList.add('orders-loading');
-
-    try {
-      const res = await fetch(endpoint);
-      const orders = await res.json();
-      if (!Array.isArray(orders)) throw new Error('Invalid data format');
-
-      const template = wrapper.querySelector('[data-astroweave-order]');
-      if (!template) return console.error('AstroWeave: No order template found.');
-      template.remove();
-
-      orders.forEach(order => {
-        const clone = template.cloneNode(true);
-        clone.setAttribute('data-astroweave-order', order.id); // Unique per order
-
-        clone.querySelector('[data-astroweave-order-id]').textContent = order.id;
-        clone.querySelector('[data-astroweave-order-date]').textContent = new Date(order.created_at).toLocaleDateString();
-        clone.querySelector('[data-astroweave-order-status]').textContent = order.status;
-        clone.querySelector('[data-astroweave-order-total]').textContent = `£${order.total.toFixed(2)}`;
-        wrapper.appendChild(clone);
-      });
-
-      wrapper.closest('.page-wrapper')?.classList.remove('orders-loading');
-
-      // --- Reviews Wiring ---
-      wireUpReviewForms();
-    } catch (err) {
-      console.error('AstroWeave Orders Error:', err);
-      wrapper.innerHTML = `<div>Failed to load orders. Please try again later.</div>`;
+  supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
     }
   });
 
-  // --- Review Module (with Clerk JWT → Supabase global header) ---
-  async function wireUpReviewForms() {
-    const supabase = await getClerkSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
+  return supabaseClient;
+}
 
-    document.querySelectorAll('.order-card[data-astroweave-order]').forEach(card => {
-      const orderId = card.getAttribute('data-astroweave-order');
-      const reviewForm = card.querySelector('form');
-      const textarea = reviewForm?.querySelector('textarea');
-      const successMsg = card.querySelector('.w-form-done');
-      const errorMsg = card.querySelector('.w-form-fail');
+// Example usage: get user data
+async function getUser() {
+  const supabase = await getSupabaseClient();
+  const { data, error } = await supabase.auth.getUser();
 
-      if (successMsg) successMsg.style.display = 'none';
-      if (errorMsg) errorMsg.style.display = 'none';
-
-      if (!user && reviewForm) {
-        reviewForm.innerHTML = `<div>Please log in to leave a review.</div>`;
-        return;
-      }
-
-      if (!reviewForm) {
-        console.warn(`No form found in card ${orderId}`);
-        return;
-      }
-
-      reviewForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (!textarea.value.trim()) return;
-
-        const supabase = await getClerkSupabaseClient();
-
-        const { error } = await supabase.from('reviews').insert({
-          user_id: user.id,
-          order_id: orderId,
-          text: textarea.value.trim(),
-        });
-
-        if (error) {
-          if (errorMsg) {
-            errorMsg.style.display = '';
-            successMsg.style.display = 'none';
-          } else {
-            alert('Failed to submit review.');
-          }
-          console.error('Supabase insert error:', error.message);
-          return;
-        }
-
-        if (successMsg) {
-          successMsg.style.display = '';
-          errorMsg.style.display = 'none';
-        } else {
-          alert('Thanks for your review!');
-        }
-        reviewForm.reset();
-      });
-    });
+  if (error) {
+    console.error('Supabase getUser error:', error);
+    return null;
   }
-})();
+
+  console.log('Supabase authenticated user:', data?.user);
+  return data?.user;
+}
+
+// You can reuse getSupabaseClient() for orders, reviews, etc.
+
+// --- Hook up your order and review modules here as needed ---
+
+// Example: wire up reviews form submit
+async function wireUpReviewForms() {
+  const supabase = await getSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    document.querySelectorAll('form.review-form').forEach(form => {
+      form.innerHTML = `<div>Please log in to leave a review.</div>`;
+    });
+    return;
+  }
+
+  document.querySelectorAll('form.review-form').forEach(form => {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const textarea = form.querySelector('textarea');
+      if (!textarea || !textarea.value.trim()) return;
+
+      const { error } = await supabase.from('reviews').insert({
+        user_id: user.id,
+        text: textarea.value.trim(),
+        // add other fields as needed
+      });
+
+      if (error) {
+        alert('Failed to submit review: ' + error.message);
+        return;
+      }
+
+      alert('Thanks for your review!');
+      form.reset();
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  wireUpReviewForms();
+});
