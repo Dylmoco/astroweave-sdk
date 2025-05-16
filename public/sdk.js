@@ -1,20 +1,36 @@
-console.log('AstroWeave SDK loaded ✅ (DEBUG VERSION)');
+console.log('AstroWeave SDK loaded ✅ (REAL CLERK+SUPABASE AUTH)');
 
 // --- Supabase Setup ---
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
 const SUPABASE_URL = 'https://lpuqrzvokroazwlricgn.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxwdXFyenZva3JvYXp3bHJpY2duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcyNDE0NzYsImV4cCI6MjA2MjgxNzQ3Nn0.hv_idyZGUD0JlFBwl_zWLpCFnI1Uoit-IahjXa6wM84';
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// --- Orders Module ---
+// --- Clerk to Supabase Auth Sync Helper ---
+async function syncClerkToSupabase() {
+  // Wait for Clerk to be loaded
+  if (!window.Clerk) return;
+  await window.Clerk.load();
+
+  const session = window.Clerk.session;
+  if (!session) return;
+
+  // Use Clerk's JWT template name (yours is "supabase")
+  const token = await session.getToken({ template: "supabase" });
+  if (token) {
+    supabase.auth.setAuth(token); // This sets the Authorization Bearer
+  }
+}
+
+// --- Orders + Reviews Module (all code that needs auth must call syncClerkToSupabase before accessing Supabase user) ---
 (function () {
   const ATTR = 'data-astroweave-orders';
 
   document.addEventListener('DOMContentLoaded', async () => {
-    console.log('DOMContentLoaded event fired!');
     const wrapper = document.querySelector(`[${ATTR}]`);
-    if (!wrapper) return console.log('NO wrapper found');
+    if (!wrapper) return;
 
     const endpoint = wrapper.getAttribute(ATTR);
     if (!endpoint) return console.error('AstroWeave: No orders endpoint found.');
@@ -51,19 +67,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     }
   });
 
-  // --- Review Module: MVP (Webflow form compatible, debug) ---
+  // --- Review Module (now with real auth) ---
   async function wireUpReviewForms() {
+    await syncClerkToSupabase();
     const { data: { user } } = await supabase.auth.getUser();
-    console.log('wireUpReviewForms(): running!');
-    const cards = document.querySelectorAll('.order-card[data-astroweave-order]');
-    console.log('Found order cards:', cards.length);
 
-    cards.forEach(card => {
+    document.querySelectorAll('.order-card[data-astroweave-order]').forEach(card => {
       const orderId = card.getAttribute('data-astroweave-order');
       const reviewForm = card.querySelector('form');
       const textarea = reviewForm?.querySelector('textarea');
-
-      // Webflow success/error blocks
       const successMsg = card.querySelector('.w-form-done');
       const errorMsg = card.querySelector('.w-form-fail');
 
@@ -71,9 +83,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       if (successMsg) successMsg.style.display = 'none';
       if (errorMsg) errorMsg.style.display = 'none';
 
+      // Not logged in, replace form with message
       if (!user && reviewForm) {
         reviewForm.innerHTML = `<div>Please log in to leave a review.</div>`;
-        console.log(`Card ${orderId}: Not logged in`);
         return;
       }
 
@@ -82,17 +94,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         return;
       }
 
-      console.log(`Wiring up form for orderId ${orderId}`);
-
       reviewForm.addEventListener('submit', async (e) => {
-        console.log(`Submit fired for order ${orderId}`);
         e.preventDefault();
         e.stopPropagation();
 
-        if (!textarea.value.trim()) {
-          console.log(`Submit cancelled for order ${orderId} (empty textarea)`);
-          return;
-        }
+        if (!textarea.value.trim()) return;
+
+        await syncClerkToSupabase(); // Always get fresh token before secure action
 
         // Insert review into Supabase
         const { error } = await supabase.from('reviews').insert({
@@ -123,4 +131,3 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     });
   }
 })();
-
