@@ -12,7 +12,6 @@ let supabaseClient = null;
  * Returns a Supabase client with Clerk JWT in headers if user is signed in
  */
 async function getSupabaseClient() {
-  // If Clerk isn't loaded yet, return anon client
   if (!window.Clerk) {
     return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
@@ -35,13 +34,12 @@ async function getSupabaseClient() {
   return supabaseClient;
 }
 
-(async () => {
-  // Initialize Supabase client for orders
-  const supabase = await getSupabaseClient();
-
+// Wait for DOM to be ready before querying elements
+document.addEventListener('DOMContentLoaded', async () => {
   // Orders rendering logic
   const ordersWrapper = document.querySelector('[data-astroweave-orders]');
   if (ordersWrapper) {
+    console.log('Rendering dummy orders...');
     ordersWrapper.closest('.page-wrapper')?.classList.add('orders-loading');
     try {
       const endpoint = ordersWrapper.getAttribute('data-astroweave-orders');
@@ -68,16 +66,17 @@ async function getSupabaseClient() {
     }
   }
 
-  // Review forms wiring with debug and fallback injection
+  // Review forms wiring with debug and robust injection
   const clerkUser = window.Clerk?.session?.user;
   const orderCards = document.querySelectorAll('.order-card[data-astroweave-order]');
   console.log('Found order cards for review wiring:', orderCards.length);
 
   orderCards.forEach(card => {
+    // Find an existing form with a textarea, else inject a fallback
     let reviewForm = card.querySelector('form');
-    if (!reviewForm) {
-      console.warn('No review form found in card, injecting default form for testing:', card);
-      // Inject a simple review form for testing
+    const hasTextarea = reviewForm?.querySelector('textarea');
+    if (!reviewForm || !hasTextarea) {
+      console.warn('Injecting fallback review form into card:', card);
       reviewForm = document.createElement('form');
       reviewForm.innerHTML = `
         <textarea placeholder="Write your review" required></textarea>
@@ -86,7 +85,7 @@ async function getSupabaseClient() {
       card.appendChild(reviewForm);
     }
 
-    // Hide form if not logged in
+    // If user not logged in, hide form and show notice
     if (!clerkUser) {
       reviewForm.style.display = 'none';
       const loginNotice = document.createElement('div');
@@ -95,11 +94,16 @@ async function getSupabaseClient() {
       return;
     }
 
-    console.log('Wiring review form for user:', clerkUser.id);
+    console.log('Attaching submit listener for user:', clerkUser.id);
     reviewForm.addEventListener('submit', async e => {
       e.preventDefault();
+      console.log('Review form submitted for card:', card.getAttribute('data-astroweave-order'));
+
       const textarea = reviewForm.querySelector('textarea');
-      if (!textarea.value.trim()) return;
+      if (!textarea || !textarea.value.trim()) {
+        console.warn('No review text provided, aborting.');
+        return;
+      }
 
       const client = await getSupabaseClient();
       console.log('Submitting review for order:', card.getAttribute('data-astroweave-order'));
@@ -114,10 +118,11 @@ async function getSupabaseClient() {
         console.error('Supabase insert error:', insertError.message);
         alert('Failed to submit review: ' + insertError.message);
       } else {
+        console.log('Review submitted successfully');
         alert('Thanks for your review!');
         reviewForm.reset();
       }
     });
   });
-})();
+});
 
