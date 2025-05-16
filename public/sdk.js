@@ -12,7 +12,7 @@ let supabaseClient = null;
  * Returns a Supabase client with Clerk JWT in headers if user is signed in
  */
 async function getSupabaseClient() {
-  // If Clerk isn't loaded, return anon client
+  // If Clerk isn't loaded yet, return anon client
   if (!window.Clerk) {
     return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
@@ -26,20 +26,17 @@ async function getSupabaseClient() {
   const token = await session.getToken({ template: 'supabase' });
   console.log('Clerk Supabase JWT:', token);
 
-  // Create a new client instance with global headers for auth
+  // Recreate client with global auth header
   supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers: { Authorization: `Bearer ${token}` }
     }
   });
-
   return supabaseClient;
 }
 
 (async () => {
-  // Initialize client
+  // Initialize Supabase client for orders
   const supabase = await getSupabaseClient();
 
   // Orders rendering logic
@@ -71,26 +68,42 @@ async function getSupabaseClient() {
     }
   }
 
-  // Review forms wiring
-  // Get Clerk user directly
-  const clerkUser = window.Clerk && window.Clerk.session ? window.Clerk.session.user : null;
+  // Review forms wiring with debug and fallback injection
+  const clerkUser = window.Clerk?.session?.user;
+  const orderCards = document.querySelectorAll('.order-card[data-astroweave-order]');
+  console.log('Found order cards for review wiring:', orderCards.length);
 
-  document.querySelectorAll('.order-card[data-astroweave-order]').forEach(card => {
-    const reviewForm = card.querySelector('form');
-    const textarea = reviewForm?.querySelector('textarea');
-    const successMsg = card.querySelector('.w-form-done');
-    const errorMsg = card.querySelector('.w-form-fail');
+  orderCards.forEach(card => {
+    let reviewForm = card.querySelector('form');
+    if (!reviewForm) {
+      console.warn('No review form found in card, injecting default form for testing:', card);
+      // Inject a simple review form for testing
+      reviewForm = document.createElement('form');
+      reviewForm.innerHTML = `
+        <textarea placeholder="Write your review" required></textarea>
+        <button type="submit">Submit Review</button>
+      `;
+      card.appendChild(reviewForm);
+    }
 
+    // Hide form if not logged in
     if (!clerkUser) {
-      reviewForm && (reviewForm.innerHTML = '<div>Please log in to leave a review.</div>');
+      reviewForm.style.display = 'none';
+      const loginNotice = document.createElement('div');
+      loginNotice.textContent = 'Please log in to leave a review.';
+      card.appendChild(loginNotice);
       return;
     }
 
-    reviewForm?.addEventListener('submit', async e => {
+    console.log('Wiring review form for user:', clerkUser.id);
+    reviewForm.addEventListener('submit', async e => {
       e.preventDefault();
-      if (!textarea?.value.trim()) return;
+      const textarea = reviewForm.querySelector('textarea');
+      if (!textarea.value.trim()) return;
 
       const client = await getSupabaseClient();
+      console.log('Submitting review for order:', card.getAttribute('data-astroweave-order'));
+
       const { error: insertError } = await client.from('reviews').insert({
         user_id: clerkUser.id,
         order_id: card.getAttribute('data-astroweave-order'),
@@ -99,11 +112,9 @@ async function getSupabaseClient() {
 
       if (insertError) {
         console.error('Supabase insert error:', insertError.message);
-        if (errorMsg) errorMsg.style.display = '';
-        if (successMsg) successMsg.style.display = 'none';
+        alert('Failed to submit review: ' + insertError.message);
       } else {
-        if (successMsg) successMsg.style.display = '';
-        if (errorMsg) errorMsg.style.display = 'none';
+        alert('Thanks for your review!');
         reviewForm.reset();
       }
     });
