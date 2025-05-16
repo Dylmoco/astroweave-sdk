@@ -1,4 +1,4 @@
-console.log('AstroWeave SDK loaded ✅');
+console.log('AstroWeave SDK loaded ✅ (DEBUG VERSION)');
 
 // --- Supabase Setup ---
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
@@ -12,8 +12,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const ATTR = 'data-astroweave-orders';
 
   document.addEventListener('DOMContentLoaded', async () => {
+    console.log('DOMContentLoaded event fired!');
     const wrapper = document.querySelector(`[${ATTR}]`);
-    if (!wrapper) return;
+    if (!wrapper) return console.log('NO wrapper found');
 
     const endpoint = wrapper.getAttribute(ATTR);
     if (!endpoint) return console.error('AstroWeave: No orders endpoint found.');
@@ -50,17 +51,19 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     }
   });
 
-  // --- Review Module: MVP (Webflow form compatible) ---
+  // --- Review Module: MVP (Webflow form compatible, debug) ---
   async function wireUpReviewForms() {
-    // Auth: get user
     const { data: { user } } = await supabase.auth.getUser();
+    console.log('wireUpReviewForms(): running!');
+    const cards = document.querySelectorAll('.order-card[data-astroweave-order]');
+    console.log('Found order cards:', cards.length);
 
-    document.querySelectorAll('.order-card[data-astroweave-order]').forEach(card => {
+    cards.forEach(card => {
       const orderId = card.getAttribute('data-astroweave-order');
       const reviewForm = card.querySelector('form');
       const textarea = reviewForm?.querySelector('textarea');
 
-      // Webflow's built-in success/error messages:
+      // Webflow success/error blocks
       const successMsg = card.querySelector('.w-form-done');
       const errorMsg = card.querySelector('.w-form-fail');
 
@@ -68,17 +71,28 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       if (successMsg) successMsg.style.display = 'none';
       if (errorMsg) errorMsg.style.display = 'none';
 
-      // If not logged in, replace form with message
       if (!user && reviewForm) {
         reviewForm.innerHTML = `<div>Please log in to leave a review.</div>`;
+        console.log(`Card ${orderId}: Not logged in`);
         return;
       }
 
-      reviewForm?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        e.stopPropagation(); // CRUCIAL: Block Webflow AJAX hijack
+      if (!reviewForm) {
+        console.warn(`No form found in card ${orderId}`);
+        return;
+      }
 
-        if (!textarea.value.trim()) return;
+      console.log(`Wiring up form for orderId ${orderId}`);
+
+      reviewForm.addEventListener('submit', async (e) => {
+        console.log(`Submit fired for order ${orderId}`);
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!textarea.value.trim()) {
+          console.log(`Submit cancelled for order ${orderId} (empty textarea)`);
+          return;
+        }
 
         // Insert review into Supabase
         const { error } = await supabase.from('reviews').insert({
@@ -94,6 +108,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
           } else {
             alert('Failed to submit review.');
           }
+          console.error('Supabase insert error:', error.message);
           return;
         }
 
@@ -108,3 +123,4 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     });
   }
 })();
+
