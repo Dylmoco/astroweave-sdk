@@ -1,63 +1,54 @@
 console.log('AstroWeave SDK loaded ✅ (REAL CLERK+SUPABASE AUTH)');
 
-// Use Supabase JS v2 for setAuth support
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+// Use Supabase JS v1 for global headers support and getUser
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@1/+esm';
 
 const SUPABASE_URL = 'https://lpuqrzvokroazwlricgn.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxwdXFyenZva3JvYXp3bHJpZ2duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcyNDE0NzYsImV4cCI6MjA2MjgxNzQ3Nn0.hv_idyZGUD0JlFBwl_zWLpCFnI1Uoit-IahjXa6wM84';
 
-// Instantiate a single Supabase client (v2)
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let supabaseClient = null;
 
 /**
- * Returns the Supabase client, setting the Clerk JWT as the auth token if available.
+ * Returns a Supabase client with Clerk JWT in headers if user is signed in
  */
 async function getSupabaseClient() {
-  if (!window.Clerk) return supabase;
+  // If Clerk isn't loaded, return anon client
+  if (!window.Clerk) {
+    return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
   await window.Clerk.load();
 
   const session = window.Clerk.session;
-  if (!session) return supabase;
+  if (!session) {
+    return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
 
   const token = await session.getToken({ template: 'supabase' });
   console.log('Clerk Supabase JWT:', token);
 
-  // Use setAuth (v2) to set the access token for all Supabase requests
-  supabase.auth.setAuth(token);
-  return supabase;
+  // Create a new client instance with global headers for auth
+  supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  });
+
+  return supabaseClient;
 }
 
-/**
- * Fetch the authenticated user from Supabase
- */
-async function getUser() {
-  const client = await getSupabaseClient();
-  const { data, error } = await client.auth.getUser();
-  if (error) {
-    console.error('Supabase getUser error:', error);
-    return null;
-  }
-  console.log('Supabase authenticated user:', data.user);
-  return data.user;
-}
-
-/**
- * Wire up the orders UI and review forms
- */
 (async () => {
-  const client = await getSupabaseClient();
-  const { data: { user }, error: userError } = await client.auth.getUser();
-  if (userError) {
-    console.error('Error fetching user:', userError);
-  }
+  // Initialize client
+  const supabase = await getSupabaseClient();
 
-  // Orders rendering logic (dummy or real)
+  // Orders rendering logic
   const ordersWrapper = document.querySelector('[data-astroweave-orders]');
   if (ordersWrapper) {
     ordersWrapper.closest('.page-wrapper')?.classList.add('orders-loading');
     try {
-      const ordersEndpoint = ordersWrapper.getAttribute('data-astroweave-orders');
-      const res = await fetch(ordersEndpoint);
+      const endpoint = ordersWrapper.getAttribute('data-astroweave-orders');
+      const res = await fetch(endpoint);
       const orders = await res.json();
       if (Array.isArray(orders)) {
         const template = ordersWrapper.querySelector('[data-astroweave-order]');
@@ -81,13 +72,16 @@ async function getUser() {
   }
 
   // Review forms wiring
+  // Get Clerk user directly
+  const clerkUser = window.Clerk && window.Clerk.session ? window.Clerk.session.user : null;
+
   document.querySelectorAll('.order-card[data-astroweave-order]').forEach(card => {
     const reviewForm = card.querySelector('form');
     const textarea = reviewForm?.querySelector('textarea');
     const successMsg = card.querySelector('.w-form-done');
     const errorMsg = card.querySelector('.w-form-fail');
 
-    if (!user) {
+    if (!clerkUser) {
       reviewForm && (reviewForm.innerHTML = '<div>Please log in to leave a review.</div>');
       return;
     }
@@ -96,21 +90,23 @@ async function getUser() {
       e.preventDefault();
       if (!textarea?.value.trim()) return;
 
+      const client = await getSupabaseClient();
       const { error: insertError } = await client.from('reviews').insert({
-        user_id: user.id,
+        user_id: clerkUser.id,
         order_id: card.getAttribute('data-astroweave-order'),
         text: textarea.value.trim(),
       });
 
       if (insertError) {
         console.error('Supabase insert error:', insertError.message);
-        errorMsg ? errorMsg.style.display = '' : alert('Failed to submit review');
-        successMsg && (successMsg.style.display = 'none');
+        if (errorMsg) errorMsg.style.display = '';
+        if (successMsg) successMsg.style.display = 'none';
       } else {
-        successMsg ? successMsg.style.display = '' : alert('Thanks for your review!');
-        errorMsg && (errorMsg.style.display = 'none');
+        if (successMsg) successMsg.style.display = '';
+        if (errorMsg) errorMsg.style.display = 'none';
         reviewForm.reset();
       }
     });
   });
 })();
+
