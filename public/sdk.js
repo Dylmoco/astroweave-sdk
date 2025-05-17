@@ -3,23 +3,12 @@ console.log('AstroWeave SDK ✅ Connected with Supabase + Clerk');
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
 const SUPABASE_URL = 'https://lpuqrzvokroazwlricgn.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // keep secret if deployed server-side
+const SUPABASE_ANON_KEY = 'your_anon_key_here'; // replace with real one
 
 async function getSupabaseClient() {
   await window.Clerk.load();
   const session = window.Clerk.session;
-  if (!session) {
-    console.warn('❌ No active Clerk session found.');
-    return null;
-  }
-
   const token = await session.getToken({ template: 'supabase' });
-
-  console.log('📛 Clerk JWT token:', token);
-if (!token) {
-  console.warn('❌ Clerk token is null — user may not be logged in or template is misconfigured.');
-}
-
 
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: {
@@ -33,38 +22,19 @@ if (!token) {
 document.addEventListener('DOMContentLoaded', async () => {
   await window.Clerk.load();
   const clerkUser = window.Clerk?.session?.user;
-
-  console.log('🧑 Clerk user:', clerkUser);
-
-  if (!clerkUser) {
-    console.warn('❌ No Clerk user found.');
-    return;
-  }
+  if (!clerkUser) return;
 
   const supabase = await getSupabaseClient();
-  if (!supabase) return;
-
   const { data: orders, error } = await supabase
     .from('orders')
-    .select('*'); // RLS will handle filtering by user_id
+    .select('*');
 
-  if (error) {
-    console.error('❌ Failed to fetch orders:', error);
-  } else {
-    console.log('📦 Orders loaded:', orders);
-  }
-
-  if (!orders || orders.length === 0) {
-    console.warn('⚠️ No orders returned. RLS may be blocking or no data exists.');
-  }
+  if (error || !orders) return;
 
   const container = document.getElementById('orderList');
-  if (!container) {
-    console.warn('⚠️ Missing #orderList container in DOM');
-    return;
-  }
+  if (!container) return;
 
-  container.innerHTML = ''; // Clear placeholder content
+  container.innerHTML = '';
 
   orders.forEach(order => {
     const card = document.createElement('div');
@@ -78,7 +48,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div class="order-total">Total: £${order.total_price.toFixed(2)}</div>
     `;
 
-    // Review UI
     const reviewDiv = document.createElement('div');
     reviewDiv.className = 'astroweave-review';
     reviewDiv.innerHTML = `
@@ -87,7 +56,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     `;
     card.appendChild(reviewDiv);
 
-    // Review submit
     const submitBtn = reviewDiv.querySelector('.astroweave-review-submit');
     submitBtn.onclick = async () => {
       const textarea = reviewDiv.querySelector('.astroweave-review-text');
@@ -105,8 +73,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
 
       if (insertError) {
-        console.error('❌ Review insert error:', insertError.message);
-        alert('Failed to submit review: ' + insertError.message);
+        alert('Failed to submit review');
       } else {
         alert('✅ Thanks for your review!');
         textarea.value = '';
