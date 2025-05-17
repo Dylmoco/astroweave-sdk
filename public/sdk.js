@@ -3,11 +3,16 @@ console.log('AstroWeave SDK ✅ Connected with Supabase + Clerk');
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
 const SUPABASE_URL = 'https://lpuqrzvokroazwlricgn.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxwdXFyenZva3JvYXp3bHJpY2duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcyNDE0NzYsImV4cCI6MjA2MjgxNzQ3Nn0.hv_idyZGUD0JlFBwl_zWLpCFnI1Uoit-IahjXa6wM84';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // keep secret if deployed server-side
 
 async function getSupabaseClient() {
   await window.Clerk.load();
   const session = window.Clerk.session;
+  if (!session) {
+    console.warn('❌ No active Clerk session found.');
+    return null;
+  }
+
   const token = await session.getToken({ template: 'supabase' });
 
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -22,13 +27,17 @@ async function getSupabaseClient() {
 document.addEventListener('DOMContentLoaded', async () => {
   await window.Clerk.load();
   const clerkUser = window.Clerk?.session?.user;
-  if (!clerkUser) return;
+  if (!clerkUser) {
+    console.warn('❌ No Clerk user found.');
+    return;
+  }
 
   const supabase = await getSupabaseClient();
+  if (!supabase) return;
+
   const { data: orders, error } = await supabase
     .from('orders')
-    .select('*')
-    .eq('user_id', clerkUser.id);
+    .select('*'); // RLS will handle filtering by user_id
 
   if (error) {
     console.error('❌ Failed to fetch orders:', error);
@@ -37,7 +46,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   if (!orders || orders.length === 0) {
-    console.warn('⚠️ No orders returned. Supabase result is empty.');
+    console.warn('⚠️ No orders returned. RLS may be blocking or no data exists.');
   }
 
   const container = document.getElementById('orderList');
@@ -46,7 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  container.innerHTML = ''; // Clear dummy cards
+  container.innerHTML = ''; // Clear placeholder content
 
   orders.forEach(order => {
     const card = document.createElement('div');
@@ -60,7 +69,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div class="order-total">Total: £${order.total_price.toFixed(2)}</div>
     `;
 
-    // Append review UI
+    // Review UI
     const reviewDiv = document.createElement('div');
     reviewDiv.className = 'astroweave-review';
     reviewDiv.innerHTML = `
@@ -69,7 +78,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     `;
     card.appendChild(reviewDiv);
 
-    // Submit handler
+    // Review submit
     const submitBtn = reviewDiv.querySelector('.astroweave-review-submit');
     submitBtn.onclick = async () => {
       const textarea = reviewDiv.querySelector('.astroweave-review-text');
