@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const { data: orders, error } = await supabase
     .from('orders')
     .select('*')
-    .eq('user_id', clerkUser.id);
+    .ilike('user_id', `%${clerkUser.id}%`);
 
   if (error) {
     console.error('❌ Failed to fetch orders:', error);
