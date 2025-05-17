@@ -32,7 +32,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (error) {
     console.error('❌ Failed to fetch orders:', error);
-    return;
+  } else {
+    console.log('📦 Orders loaded:', orders);
+  }
+
+  if (!orders || orders.length === 0) {
+    console.warn('⚠️ No orders returned. Supabase result is empty.');
   }
 
   const container = document.getElementById('orderList');
