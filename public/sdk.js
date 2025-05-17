@@ -27,7 +27,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const googleBtn = document.getElementById('google-bttn');
   if (googleBtn) {
     googleBtn.addEventListener('click', async () => {
-      await supabase.auth.signInWithOAuth({ provider: 'google' });
+      await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin // redirect back to live Webflow site
+        }
+      });
     });
   }
 
