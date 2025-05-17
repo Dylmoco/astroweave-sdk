@@ -1,31 +1,43 @@
-console.log('AstroWeave SDK ✅ Connected with Supabase + Clerk');
+console.log('AstroWeave SDK ✅ Connected with Supabase Auth');
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
 const SUPABASE_URL = 'https://lpuqrzvokroazwlricgn.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxwdXFyenZva3JvYXp3bHJpY2duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcyNDE0NzYsImV4cCI6MjA2MjgxNzQ3Nn0.hv_idyZGUD0JlFBwl_zWLpCFnI1Uoit-IahjXa6wM84';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // keep safe
 
-async function getSupabaseClient() {
-  await window.Clerk.load();
-  const session = window.Clerk.session;
-  const token = await session.getToken({ template: 'supabase' });
-
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${token}`
-      }
-    }
-  });
-}
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 document.addEventListener('DOMContentLoaded', async () => {
-  await window.Clerk.load();
-  const clerkUser = window.Clerk?.session?.user;
-  if (!clerkUser) return;
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-  const supabase = await getSupabaseClient();
+  // Show/hide logged-in indicator
+  const statusEl = document.getElementById('logged-in-status');
+  if (statusEl) statusEl.style.display = user ? 'block' : 'none';
+
+  // Bind logout button
+  const logoutBtn = document.getElementById('log-out-bttn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      await supabase.auth.signOut();
+      location.reload();
+    });
+  }
+
+  // Bind Google login button
+  const googleBtn = document.getElementById('google-bttn');
+  if (googleBtn) {
+    googleBtn.addEventListener('click', async () => {
+      await supabase.auth.signInWithOAuth({ provider: 'google' });
+    });
+  }
+
+  // Stop here if not logged in
+  if (!user || userError) {
+    console.warn('❌ No Supabase user session found.');
+    return;
+  }
+
+  // Fetch orders
   const { data: orders, error } = await supabase
     .from('orders')
     .select('*');
@@ -59,7 +71,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div class="order-total">Total: £${order.total_price.toFixed(2)}</div>
     `;
 
-    // Append review UI
     const reviewDiv = document.createElement('div');
     reviewDiv.className = 'astroweave-review';
     reviewDiv.innerHTML = `
@@ -68,7 +79,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     `;
     card.appendChild(reviewDiv);
 
-    // Submit handler
     const submitBtn = reviewDiv.querySelector('.astroweave-review-submit');
     submitBtn.onclick = async () => {
       const textarea = reviewDiv.querySelector('.astroweave-review-text');
@@ -80,7 +90,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       const { error: insertError } = await supabase.from('reviews').insert({
-        user_id: clerkUser.id,
+        user_id: user.id,
         order_id: order.id,
         text
       });
