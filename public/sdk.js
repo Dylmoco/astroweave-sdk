@@ -15,6 +15,12 @@ async function getSupabaseClient() {
 
   const token = await session.getToken({ template: 'supabase' });
 
+  console.log('📛 Clerk JWT token:', token);
+if (!token) {
+  console.warn('❌ Clerk token is null — user may not be logged in or template is misconfigured.');
+}
+
+
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: {
       headers: {
@@ -27,6 +33,9 @@ async function getSupabaseClient() {
 document.addEventListener('DOMContentLoaded', async () => {
   await window.Clerk.load();
   const clerkUser = window.Clerk?.session?.user;
+
+  console.log('🧑 Clerk user:', clerkUser);
+
   if (!clerkUser) {
     console.warn('❌ No Clerk user found.');
     return;
