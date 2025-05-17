@@ -13,7 +13,8 @@ async function getSupabaseClient() {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: {
       headers: {
-        Authorization: Bearer ${token}
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`
       }
     }
   });
@@ -27,16 +28,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   const supabase = await getSupabaseClient();
   const { data: orders, error } = await supabase
     .from('orders')
-    .select('*')
-    .eq('user_id', clerkUser.id);
+    .select('*');
 
-  if (error) {
+  if (error || !orders) {
     console.error('❌ Failed to fetch orders:', error);
-  } else {
-    console.log('📦 Orders loaded:', orders);
+    return;
   }
 
-  if (!orders || orders.length === 0) {
+  if (!orders.length) {
     console.warn('⚠️ No orders returned. Supabase result is empty.');
   }
 
@@ -53,20 +52,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     card.className = 'order-card';
     card.setAttribute('data-astroweave-order', order.id);
 
-    card.innerHTML = 
+    card.innerHTML = `
       <div class="order-id">Order #: ${order.order_number}</div>
       <div class="order-date">Date: ${new Date(order.order_date).toLocaleDateString()}</div>
       <div class="order-status">Status: ${order.status}</div>
       <div class="order-total">Total: £${order.total_price.toFixed(2)}</div>
-    ;
+    `;
 
     // Append review UI
     const reviewDiv = document.createElement('div');
     reviewDiv.className = 'astroweave-review';
-    reviewDiv.innerHTML = 
+    reviewDiv.innerHTML = `
       <textarea class="astroweave-review-text" placeholder="Write your review..." style="width: 100%; margin-bottom: 8px;"></textarea>
       <button class="astroweave-review-submit" style="padding: 6px 18px; cursor: pointer;">Submit Review</button>
-    ;
+    `;
     card.appendChild(reviewDiv);
 
     // Submit handler
