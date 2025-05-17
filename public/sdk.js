@@ -23,14 +23,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Bind Google login button
+  // Bind Google login button with redirect to Webflow login page
   const googleBtn = document.getElementById('google-bttn');
   if (googleBtn) {
     googleBtn.addEventListener('click', async () => {
       await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin // redirect back to live Webflow site
+          redirectTo: 'https://astroweave-clonable.webflow.io/login-sign-up'
         }
       });
     });
